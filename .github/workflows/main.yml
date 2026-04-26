@@ -34,16 +34,13 @@ jobs:
           mkdir -p pytorch_files
           
           echo "Splitting files..."
-          # پیدا کردن فایل حجیم torch و خرد کردن آن
           TORCH_WHL=$(ls torch-2*.whl | head -n 1)
           split -b 90M "$TORCH_WHL" temp_chunks/torch_part_
           
-          # انتقال بقیه فایل‌ها
-          mv torchvision*.whl temp_chunks/
-          mv torchaudio*.whl temp_chunks/
+          mv torchvision*.whl temp_chunks/ || true
+          mv torchaudio*.whl temp_chunks/ || true
           rm "$TORCH_WHL"
           
-          # آپلود دانه‌دانه قطعات
           for file in temp_chunks/*; do
             filename=$(basename "$file")
             if [ -f "pytorch_files/$filename" ]; then
@@ -52,10 +49,13 @@ jobs:
               echo "🟡 Uploading $filename..."
               cp "$file" "pytorch_files/$filename"
               git add "pytorch_files/$filename"
-              git commit -m "Add chunk $filename"
-              git push origin main
+              # جلوگیری از توقف در صورت نبود تغییرات
+              git commit -m "Add chunk $filename" || echo "Nothing to commit"
+              # استفاده از HEAD به جای main تا روی هر برنچی کار کند
+              git push origin HEAD || echo "Push failed, moving to next"
             fi
           done
+
 
       - name: Create Tag for Source Code Zip
         run: |
