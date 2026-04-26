@@ -35,7 +35,7 @@ jobs:
           split -b 90M torch.whl temp_chunks/torch_part_
           mv torchvision.whl temp_chunks/
           mv torchaudio.whl temp_chunks/
-          rm -f torch.whl
+          rm torch.whl
           
           # بررسی قطعات و آپلود فقط در صورت عدم وجود
           for file in temp_chunks/*; do
@@ -56,3 +56,4 @@ jobs:
           TAG="v$(date +%s)"
           git tag $TAG
           git push origin $TAG
+
