@@ -58,4 +58,3 @@ jobs:
           TAG="v$(date +%s)"
           git tag $TAG
           git push origin $TAG
-
