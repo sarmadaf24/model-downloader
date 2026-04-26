@@ -17,16 +17,16 @@ jobs:
           git config --global user.email "action@github.com"
           git config --global http.postBuffer 524288000
 
-      - name: Download Wheels
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Download Wheels using PIP
         run: |
-          echo "Downloading torch..."
-          curl -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" -o torch.whl "https://download.pytorch.org/whl/cu121/torch-2.8.0%2Bcu121-cp310-cp310-win_amd64.whl"
-          
-          echo "Downloading torchvision..."
-          curl -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" -o torchvision.whl "https://download.pytorch.org/whl/cu121/torchvision-0.23.0%2Bcu121-cp310-cp310-win_amd64.whl"
-          
-          echo "Downloading torchaudio..."
-          curl -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" -o torchaudio.whl "https://download.pytorch.org/whl/cu121/torchaudio-2.8.0%2Bcu121-cp310-cp310-win_amd64.whl"
+          python -m pip install --upgrade pip
+          echo "Downloading correct wheels automatically..."
+          pip download torch==2.8.0 torchvision==0.23.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu121 --platform win_amd64 --python-version 3.10 --only-binary=:all: --no-deps
 
       - name: Split and Push (Resumable)
         run: |
@@ -34,16 +34,20 @@ jobs:
           mkdir -p pytorch_files
           
           echo "Splitting files..."
-          split -b 90M torch.whl temp_chunks/torch_part_
-          mv torchvision.whl temp_chunks/
-          mv torchaudio.whl temp_chunks/
-          rm torch.whl
+          # پیدا کردن فایل حجیم torch و خرد کردن آن
+          TORCH_WHL=$(ls torch-2*.whl | head -n 1)
+          split -b 90M "$TORCH_WHL" temp_chunks/torch_part_
           
-          # بررسی قطعات و آپلود فقط در صورت عدم وجود
+          # انتقال بقیه فایل‌ها
+          mv torchvision*.whl temp_chunks/
+          mv torchaudio*.whl temp_chunks/
+          rm "$TORCH_WHL"
+          
+          # آپلود دانه‌دانه قطعات
           for file in temp_chunks/*; do
             filename=$(basename "$file")
             if [ -f "pytorch_files/$filename" ]; then
-              echo "🟢 $filename already exists in repository. Skipping..."
+              echo "🟢 $filename already exists. Skipping..."
             else
               echo "🟡 Uploading $filename..."
               cp "$file" "pytorch_files/$filename"
