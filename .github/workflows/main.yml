@@ -1,111 +1,41 @@
-name: Build Full Quranic Text & Font Data Pack
+name: Build Quran Database (Phase 1)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # امکان اجرای دستی اکشن
 
 permissions:
-  contents: write
+  contents: write    # دسترسی لازم برای کامیت و ساخت Release/Tag
 
 jobs:
-  build-data-pack:
+  build-db:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 2. Configure Git
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run Builder Script
+        run: python builder.py
+
+      - name: Commit and Push changes
         run: |
-          git config --global user.name "GitHub Action Bot"
-          git config --global user.email "action-bot@github.com"
-          echo "Git has been configured."
-
-      - name: 3. Create Directories
-        run: |
-          mkdir -p raw_data/texts_repo raw_data/translations_repo raw_data/fonts
-          echo "Required directories created successfully."
-
-      - name: 4. Clone Tanzil Texts Repository
-        run: |
-          echo "Attempting to clone Tanzil Quran Texts..."
-          git clone --verbose --progress --depth 1 https://github.com/tanzil/quran-text.git raw_data/texts_repo
-          echo "Successfully cloned Tanzil Quran Texts."
-
-      - name: 5. Clone Tanzil Translations Repository
-        run: |
-          echo "Attempting to clone Tanzil Quran Translations..."
-          git clone --verbose --progress --depth 1 https://github.com/tanzil/quran-translation.git raw_data/translations_repo
-          echo "Successfully cloned Tanzil Quran Translations."
-
-      - name: 6. Download Word-by-Word Data & Fonts
-        run: |
-          echo "Downloading additional files with wget..."
-          wget -v -O raw_data/quranic-corpus-morphology-0.4.txt https://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt
-          wget -v -O raw_data/fonts/NotoNaskhArabic-Regular.ttf https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf
-          wget -v -O raw_data/fonts/Amiri.zip https://github.com/alif-type/amiri/releases/download/1.000/Amiri-1.000.zip
-          wget -v -O raw_data/fonts/uthman-taha.zip https://github.com/makkuk/KFGQPC-Uthman-Taha-Naskh/archive/refs/heads/main.zip
-          echo "All wget downloads completed."
-
-      - name: 7. Process All Data
-        run: |
-          # (بقیه کد بدون تغییر باقی می‌ماند)
-          # Python scripts for processing
-          cat <<'EOF' > tanzil_to_json.py
-          import sys, json, os
-          def convert_to_json(input_file, output_file):
-              if not os.path.exists(input_file): return
-              data = []
-              with open(input_file, 'r', encoding='utf-8') as f:
-                  for line in f:
-                      if line.strip().startswith('#') or not line.strip(): continue
-                      parts = line.strip().split('|')
-                      if len(parts) >= 3:
-                          try: data.append({'sura': int(parts[0]), 'ayah': int(parts[1]), 'text': '|'.join(parts[2:])})
-                          except: continue
-              with open(output_file, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False, indent=2)
-          if __name__ == "__main__": convert_to_json(sys.argv[1], sys.argv[2])
-          EOF
-
-          cat <<'EOF' > combine_json.py
-          import sys, json, os
-          def combine_files(input_dir, output_file):
-              combined_data = {}
-              for filename in sorted(os.listdir(input_dir)):
-                  if filename.endswith(".json"):
-                      key = os.path.splitext(filename)[0]
-                      with open(os.path.join(input_dir, filename), 'r', encoding='utf-8') as f: combined_data[key] = json.load(f)
-              with open(output_file, 'w', encoding='utf-8') as f: json.dump(combined_data, f, ensure_ascii=False, indent=2)
-          if __name__ == "__main__": combine_files(sys.argv[1], sys.argv[2])
-          EOF
-
-          # Processing steps
-          mkdir -p data/texts/individual data/texts/combined data/translations/individual data/translations/combined data/word-by-word fonts
-          
-          for file in raw_data/texts_repo/*.txt; do python tanzil_to_json.py "$file" "data/texts/individual/$(basename "$file" .txt).json"; done
-          python combine_json.py data/texts/individual data/texts/combined/texts-all.json
-          
-          for file in raw_data/translations_repo/*.txt; do python tanzil_to_json.py "$file" "data/translations/individual/$(basename "$file" .txt).json"; done
-          python combine_json.py data/translations/individual data/translations/combined/translations-all.json
-          
-          python tanzil_to_json.py raw_data/quranic-corpus-morphology-0.4.txt data/word-by-word/quran-corpus.json
-          
-          unzip -o "raw_data/fonts/*.zip" -d fonts/ || echo "No zip files to extract or unzip failed."
-          cp raw_data/fonts/*.ttf fonts/ || echo "No ttf files to copy."
-          find fonts -mindepth 2 -type f -name "*.ttf" -exec mv -t fonts/ {} + || echo "No nested ttf files to move."
-          find fonts -type d -empty -delete
-
-      - name: 8. Commit and Push Data
-        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add data/ fonts/
-          if git diff --staged --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "Build: Update Quranic data pack"
-            git push
-          fi
+          # اگر تغییری نباشد ارور نمی‌دهد
+          git commit -m "Add Quran texts, translations, and fonts [Phase 1]" || echo "No changes to commit"
+          git push
 
-      - name: 9. Create and Push Tag
-        run: |
-          TAG="data-pack-$(date +%Y%m%d-%H%M%S)"
-          git tag $TAG
-          git push origin $TAG
-          echo "Successfully created and pushed tag ${TAG}"
+      - name: Create Tag and Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: db-v1
+          name: "Quran Database Phase 1"
+          body: "دیتابیس متنی قرآن، ترجمه‌ها و فونت‌ها در ساختار پوشه‌بندی استاندارد."
