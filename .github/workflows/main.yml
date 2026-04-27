@@ -18,12 +18,35 @@ jobs:
         with:
           python-version: '3.10'
 
+      # تنظیمات گیت (الزامی برای کامیت و پوش)
+      - name: Configure Git
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      # اجرای اسکریپت تفسیر و پوش کردن بلافاصله
       - name: Run Tafsir Builder
         run: python builder_tafsir.py
 
+      - name: Commit and Push Tafsir
+        run: |
+          # اگر اسکریپت شما فایل زیپ می‌سازد، فایل زیپ را اد کنید
+          git add quran_tafsir_db.zip 
+          git commit -m "Add Tafsir data" || echo "No changes"
+          git push
+
+      # اجرای اسکریپت کورپوس و پوش کردن بلافاصله
       - name: Run Corpus Builder
         run: python builder_corpus.py
 
+      - name: Commit and Push Corpus
+        run: |
+          # اگر اسکریپت شما فایل زیپ می‌سازد، فایل زیپ را اد کنید
+          git add quran_corpus_db.zip
+          git commit -m "Add Corpus data" || echo "No changes"
+          git push
+
+      # ساخت Release نهایی (اختیاری، چون فایل‌ها پوش شده‌اند)
       - name: Create Release and Upload Zips
         uses: softprops/action-gh-release@v1
         with:
