@@ -1,4 +1,6 @@
-name: Quran Data Builder CI
+# File: .github/workflows/main.yml
+
+name: Quran Qortoba Data Builder
 
 on:
   push:
@@ -10,43 +12,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install requests
-
-      # --- START: NEW STEP TO RUN QORTOBA BUILDER ---
+      
       - name: Run Qortoba XML Tafsir Builder
+        id: builder
         run: python builder_qortoba.py
 
-        continue-on-error: true
-
-      - name: List files before splitting
+      - name: List files to check for output
         run: ls -lh
 
-      - name: Split Large ZIP files into 90MB chunks
+      - name: Split Large Qortoba ZIP file into 90MB chunks
         run: |
           set -e
-          # --- START: ADDED NEW FILE TO THE LOOP ---
-          for file in quran_tafsir_db.zip qortoba_tafsirs_db.zip; do
-          # --- END: MODIFICATION ---
-            if [ -f "$file" ]; then
+          file="qortoba_tafsirs_db.zip"
+          if [ -f "$file" ]; then
+            # Ensure the file is not empty or too small before splitting
+            if [ $(stat -c%s "$file") -gt 1024 ]; then
               echo "Splitting $file..."
               split -b 90M "$file" "${file}.part"
-              rm "$file" # Remove original large file
+              rm "$file" # Remove original large file to save space
             else
-              echo "Warning: $file not found, skipping split."
+              echo "Warning: $file is too small, skipping split. It will be committed as is."
             fi
-          done
+          else
+            echo "Error: $file not found. The builder script might have failed."
+            exit 1 # Exit with an error to fail the job
+          fi
 
-      - name: List files after splitting
+      - name: List files after processing
         run: ls -lh
 
       - name: Commit and Push to repository
@@ -55,16 +54,15 @@ jobs:
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
           git pull
           
-          # --- START: ADDED NEW FILES TO GIT ---
-          git add quran_tafsir_db.zip.part* || echo "No quran.com tafsir parts to add"
-          git add qortoba_tafsirs_db.zip.part* || echo "No qortoba tafsir parts to add"
-          # --- END: MODIFICATION ---
+          # Add the split parts if they exist
+          git add qortoba_tafsirs_db.zip.part* || echo "No split parts for Qortoba tafsir to add."
           
-          git add quranic_corpus.zip || echo "No corpus file to add"
-          
+          # Add the original zip if it wasn't split (was too small)
+          git add qortoba_tafsirs_db.zip || echo "No small zip file for Qortoba tafsir to add."
+
           # Check if there are any changes to commit
           if ! git diff-index --quiet HEAD; then
-            git commit -m "Auto-update Quran data packages"
+            git commit -m "Auto-update Qortoba tafsir data package"
             git push
           else
             echo "No changes to commit."
