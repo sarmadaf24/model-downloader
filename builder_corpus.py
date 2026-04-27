@@ -5,10 +5,16 @@ import os
 
 # لیست چندین سرور و مخزن (Mirror) برای تضمین دانلود شدن فایل
 CORPUS_URLS = [
-    "https://raw.githubusercontent.com/risan/quran-corpus/master/src/data/quranic-corpus-morphology-0.4.txt",
-    "https://web.archive.org/web/20230528140417if_/http://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt",
-    "https://raw.githubusercontent.com/habibiefadzli/Quranic-Corpus/master/quranic-corpus-morphology-0.4.txt"
+    # مخازن مختلف با در نظر گرفتن حروف کوچک/بزرگ و شاخه‌های main/master
+    "https://raw.githubusercontent.com/habibiefadzli/quranic-corpus/main/quranic-corpus-morphology-0.4.txt",
+    "https://raw.githubusercontent.com/kaisdu/quranic-corpus/master/quranic-corpus-morphology-0.4.txt",
+    "https://raw.githubusercontent.com/fawazahmed0/quran-corpus/master/quranic-corpus-morphology-0.4.txt",
+    "https://raw.githubusercontent.com/gnu-tariq/quranic-corpus/master/quranic-corpus-morphology-0.4.txt",
+    "https://raw.githubusercontent.com/risan/quran-corpus/main/src/data/quranic-corpus-morphology-0.4.txt",
+    # لینک مستقیم آرشیو با ساختار متفاوت
+    "https://web.archive.org/web/20220101000000id_/http://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt"
 ]
+
 
 OUTPUT_JSON = "quranic_grammar_corpus.json"
 
