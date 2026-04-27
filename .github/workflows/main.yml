@@ -26,21 +26,19 @@ jobs:
           mkdir -p raw_data/texts_repo raw_data/translations_repo raw_data/fonts
 
           echo ">>> Cloning official Tanzil Quran text repository from GitHub..."
-          # به جای wget، کل ریپازیتوری متون را از گیت‌هاب کلون می‌کنیم
           git clone --depth 1 https://github.com/tanzil/quran-text.git raw_data/texts_repo
 
           echo ">>> Cloning official Tanzil Quran translation repository from GitHub..."
-          # کل ریپازیتوری ترجمه‌ها را نیز از گیت‌هاب کلون می‌کنیم
           git clone --depth 1 https://github.com/tanzil/quran-translation.git raw_data/translations_repo
           
           echo ">>> Downloading word-by-word data..."
-          # این لینک هنوز معتبر است
           wget -P raw_data/ https://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt
 
           echo ">>> Downloading fonts..."
           wget -P raw_data/fonts/ https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf
           wget -P raw_data/fonts/ https://github.com/alif-type/amiri/releases/download/1.000/Amiri-1.000.zip
-          wget -P raw_data/fonts/ https://github.com/makkuk/KFGQPC-Uthman-Taha-Naskh/archive/refs/heads/master.zip -O raw_data/fonts/uthman-taha.zip
+          # --- خط اصلاح شده اینجاست ---
+          wget -P raw_data/fonts/ https://github.com/makkuk/KFGQPC-Uthman-Taha-Naskh/archive/refs/heads/main.zip -O raw_data/fonts/uthman-taha.zip
 
       - name: 4. Process Data and Convert to JSON
         run: |
@@ -92,7 +90,6 @@ jobs:
           python combine_json.py data/texts/individual data/texts/combined/texts-all.json
 
           echo ">>> Processing ALL Translations from cloned repository..."
-          # حالا فایل‌ها را از پوشه کلون شده می‌خوانیم
           for file in raw_data/translations_repo/*.txt; do
             filename=$(basename "$file" .txt)
             python tanzil_to_json.py "$file" "data/translations/individual/${filename}.json"
@@ -103,7 +100,8 @@ jobs:
           python tanzil_to_json.py raw_data/quranic-corpus-morphology-0.4.txt data/word-by-word/quran-corpus.json
           
           echo ">>> Processing Fonts..."
-          unzip -o "raw_data/fonts/*.zip" -d fonts/
+          unzip -o "raw_data/fonts/uthman-taha.zip" -d raw_data/fonts/ # Unzip the corrected file
+          unzip -o "raw_data/fonts/Amiri-1.000.zip" -d raw_data/fonts/ # Unzip Amiri font
           mv raw_data/fonts/*.ttf fonts/
           find fonts -mindepth 2 -type f -exec mv {} fonts/ \;
           find fonts -type d -empty -delete
