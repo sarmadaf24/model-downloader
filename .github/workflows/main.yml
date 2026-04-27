@@ -23,6 +23,7 @@ jobs:
 
       - name: Run Corpus Builder
         run: python builder_corpus.py
+        continue-on-error: true  # <--- فقط این یک خط را اضافه کنید
 
       - name: Split Large ZIP files into 90MB chunks
         run: |
