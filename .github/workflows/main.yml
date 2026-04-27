@@ -17,28 +17,38 @@ jobs:
         run: |
           git config --global user.name "GitHub Action Bot"
           git config --global user.email "action-bot@github.com"
+          echo "Git has been configured."
 
       - name: 3. Create Directories
-        run: mkdir -p raw_data/texts_repo raw_data/translations_repo raw_data/fonts data/texts/individual data/texts/combined data/translations/individual data/translations/combined data/word-by-word fonts
-
-      - name: 4. Clone Tanzil Texts
-        run: git clone --depth 1 https://github.com/tanzil/quran-text.git raw_data/texts_repo
-
-      - name: 5. Clone Tanzil Translations
-        run: git clone --depth 1 https://github.com/tanzil/quran-translation.git raw_data/translations_repo
-
-      - name: 6. Download Word-by-Word Data
-        run: wget -v -O raw_data/quranic-corpus-morphology-0.4.txt https://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt || echo "Word-by-word download failed"
-
-      - name: 7. Download Fonts
         run: |
+          mkdir -p raw_data/texts_repo raw_data/translations_repo raw_data/fonts
+          echo "Required directories created successfully."
+
+      - name: 4. Clone Tanzil Texts Repository
+        run: |
+          echo "Attempting to clone Tanzil Quran Texts..."
+          git clone --verbose --progress --depth 1 https://github.com/tanzil/quran-text.git raw_data/texts_repo
+          echo "Successfully cloned Tanzil Quran Texts."
+
+      - name: 5. Clone Tanzil Translations Repository
+        run: |
+          echo "Attempting to clone Tanzil Quran Translations..."
+          git clone --verbose --progress --depth 1 https://github.com/tanzil/quran-translation.git raw_data/translations_repo
+          echo "Successfully cloned Tanzil Quran Translations."
+
+      - name: 6. Download Word-by-Word Data & Fonts
+        run: |
+          echo "Downloading additional files with wget..."
+          wget -v -O raw_data/quranic-corpus-morphology-0.4.txt https://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt
           wget -v -O raw_data/fonts/NotoNaskhArabic-Regular.ttf https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf
           wget -v -O raw_data/fonts/Amiri.zip https://github.com/alif-type/amiri/releases/download/1.000/Amiri-1.000.zip
           wget -v -O raw_data/fonts/uthman-taha.zip https://github.com/makkuk/KFGQPC-Uthman-Taha-Naskh/archive/refs/heads/main.zip
+          echo "All wget downloads completed."
 
-      - name: 8. Process Data and Convert to JSON
+      - name: 7. Process All Data
         run: |
-          # اسکریپت پایتون برای تبدیل فرمت
+          # (بقیه کد بدون تغییر باقی می‌ماند)
+          # Python scripts for processing
           cat <<'EOF' > tanzil_to_json.py
           import sys, json, os
           def convert_to_json(input_file, output_file):
@@ -49,15 +59,12 @@ jobs:
                       if line.strip().startswith('#') or not line.strip(): continue
                       parts = line.strip().split('|')
                       if len(parts) >= 3:
-                          try:
-                              data.append({'sura': int(parts[0]), 'ayah': int(parts[1]), 'text': '|'.join(parts[2:])})
+                          try: data.append({'sura': int(parts[0]), 'ayah': int(parts[1]), 'text': '|'.join(parts[2:])})
                           except: continue
-              with open(output_file, 'w', encoding='utf-8') as f:
-                  json.dump(data, f, ensure_ascii=False, indent=2)
+              with open(output_file, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False, indent=2)
           if __name__ == "__main__": convert_to_json(sys.argv[1], sys.argv[2])
           EOF
 
-          # اسکریپت ترکیب فایل‌ها
           cat <<'EOF' > combine_json.py
           import sys, json, os
           def combine_files(input_dir, output_file):
@@ -65,29 +72,40 @@ jobs:
               for filename in sorted(os.listdir(input_dir)):
                   if filename.endswith(".json"):
                       key = os.path.splitext(filename)[0]
-                      with open(os.path.join(input_dir, filename), 'r', encoding='utf-8') as f:
-                          combined_data[key] = json.load(f)
-              with open(output_file, 'w', encoding='utf-8') as f:
-                  json.dump(combined_data, f, ensure_ascii=False, indent=2)
+                      with open(os.path.join(input_dir, filename), 'r', encoding='utf-8') as f: combined_data[key] = json.load(f)
+              with open(output_file, 'w', encoding='utf-8') as f: json.dump(combined_data, f, ensure_ascii=False, indent=2)
           if __name__ == "__main__": combine_files(sys.argv[1], sys.argv[2])
           EOF
 
-          # پردازش متون
-          for file in raw_data/texts_repo/*.txt; do
-            python tanzil_to_json.py "$file" "data/texts/individual/$(basename "$file" .txt).json"
-          done
+          # Processing steps
+          mkdir -p data/texts/individual data/texts/combined data/translations/individual data/translations/combined data/word-by-word fonts
+          
+          for file in raw_data/texts_repo/*.txt; do python tanzil_to_json.py "$file" "data/texts/individual/$(basename "$file" .txt).json"; done
           python combine_json.py data/texts/individual data/texts/combined/texts-all.json
-
-          # پردازش ترجمه‌ها
-          for file in raw_data/translations_repo/*.txt; do
-            python tanzil_to_json.py "$file" "data/translations/individual/$(basename "$file" .txt).json"
-          done
+          
+          for file in raw_data/translations_repo/*.txt; do python tanzil_to_json.py "$file" "data/translations/individual/$(basename "$file" .txt).json"; done
           python combine_json.py data/translations/individual data/translations/combined/translations-all.json
-
-          # پردازش Word-by-Word
+          
           python tanzil_to_json.py raw_data/quranic-corpus-morphology-0.4.txt data/word-by-word/quran-corpus.json
+          
+          unzip -o "raw_data/fonts/*.zip" -d fonts/ || echo "No zip files to extract or unzip failed."
+          cp raw_data/fonts/*.ttf fonts/ || echo "No ttf files to copy."
+          find fonts -mindepth 2 -type f -name "*.ttf" -exec mv -t fonts/ {} + || echo "No nested ttf files to move."
+          find fonts -type d -empty -delete
 
-          # استخراج فونت‌ها
-          unzip -o "raw_data/fonts/*.zip" -d fonts/ || true
-          cp raw_data/fonts/*.ttf fonts/ || true
-          find fonts -name "*.ttf" -exec mv {}
+      - name: 8. Commit and Push Data
+        run: |
+          git add data/ fonts/
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Build: Update Quranic data pack"
+            git push
+          fi
+
+      - name: 9. Create and Push Tag
+        run: |
+          TAG="data-pack-$(date +%Y%m%d-%H%M%S)"
+          git tag $TAG
+          git push origin $TAG
+          echo "Successfully created and pushed tag ${TAG}"
