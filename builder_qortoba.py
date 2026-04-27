@@ -18,28 +18,30 @@ def process_qortoba():
     tafsir_data = {}
     
     # 2. Find all directories (tafsirs) in the cloned repo
-    base_path = os.path.join(CLONE_DIR, "tafsirs_content")
+    # تغییر مسیر پایه به پوشه content
+    base_path = os.path.join(CLONE_DIR, "content")
     if not os.path.exists(base_path):
-        base_path = CLONE_DIR # Fallback in case of structure changes
+        # اگر content پیدا نشد، در خود روت بگرد
+        base_path = CLONE_DIR 
 
     directories = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d)) and not d.startswith('.')]
     
-    print(f"Found {len(directories)} potential tafsir directories.")
+    print(f"Found {len(directories)} potential tafsir directories in {base_path}.")
     
     for tafsir_name in directories:
         tafsir_dir = os.path.join(base_path, tafsir_name)
+        # جستجو در تمام زیرپوشه‌ها برای فایل‌های xml در صورت نیاز، یا فقط در خود پوشه تفسیر
         xml_files = glob.glob(os.path.join(tafsir_dir, "*.xml"))
         
         tafsir_content = []
         for xml_file in xml_files:
-            # Ignore front.xml based on previous issues
+            # نادیده گرفتن فایل‌های نامرتبط
             if "front.xml" in xml_file.lower():
                 continue
                 
             try:
                 with open(xml_file, 'r', encoding='utf-8') as f:
                     xml_string = f.read()
-                    # Parse XML to Dictionary
                     parsed_dict = xmltodict.parse(xml_string)
                     tafsir_content.append({
                         "file_name": os.path.basename(xml_file),
@@ -55,7 +57,7 @@ def process_qortoba():
             print(f"  -> No valid XML data found for: {tafsir_name}")
 
     if not tafsir_data:
-        print("Warning: No tafsirs were processed. Check XML parsing logic.")
+        print("Warning: No tafsirs were processed. Check XML parsing logic or directory structure.")
         return
 
     # 3. Save to JSON and ZIP
