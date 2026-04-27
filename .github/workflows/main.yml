@@ -22,16 +22,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests
 
-      - name: Run Tafsir Builder (quran.com)
-        run: python builder_tafsir.py
-
       # --- START: NEW STEP TO RUN QORTOBA BUILDER ---
       - name: Run Qortoba XML Tafsir Builder
         run: python builder_qortoba.py
-      # --- END: NEW STEP ---
 
-      - name: Run Corpus Builder
-        run: python builder_corpus.py
         continue-on-error: true
 
       - name: List files before splitting
