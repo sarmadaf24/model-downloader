@@ -1,41 +1,36 @@
-name: Build Quran Database (Phase 1)
+name: Build Tafsir and Corpus Databases
 
 on:
-  workflow_dispatch: # امکان اجرای دستی اکشن
-
-permissions:
-  contents: write    # دسترسی لازم برای کامیت و ساخت Release/Tag
+  workflow_dispatch:
 
 jobs:
-  build-db:
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
-        run: pip install requests
+      - name: Run Tafsir Builder
+        run: python builder_tafsir.py
 
-      - name: Run Builder Script
-        run: python builder.py
+      - name: Run Corpus Builder
+        run: python builder_corpus.py
 
-      - name: Commit and Push changes
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/ fonts/
-          # اگر تغییری نباشد ارور نمی‌دهد
-          git commit -m "Add Quran texts, translations, and fonts [Phase 1]" || echo "No changes to commit"
-          git push
-
-      - name: Create Tag and Release
+      - name: Create Release and Upload Zips
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: db-v1
-          name: "Quran Database Phase 1"
-          body: "دیتابیس متنی قرآن، ترجمه‌ها و فونت‌ها در ساختار پوشه‌بندی استاندارد."
+          tag_name: final-db-v1
+          name: Quran Tafsir & Corpus Databases
+          files: |
+            quran_tafsir_db.zip
+            quran_corpus_db.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
