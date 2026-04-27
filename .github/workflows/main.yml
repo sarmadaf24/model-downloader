@@ -2,6 +2,9 @@ name: Download Whisper Model Local
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   download-and-pack:
     runs-on: ubuntu-latest
