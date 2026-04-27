@@ -25,7 +25,6 @@ jobs:
           pip install xmltodict
           python builder_qortoba.py
 
-
       - name: List files to check for output
         run: ls -lh
 
