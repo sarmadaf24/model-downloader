@@ -1,4 +1,4 @@
-name: Build Tafsir and Corpus Databases
+name: Build, Split and Push Databases
 
 on:
   workflow_dispatch:
@@ -18,42 +18,36 @@ jobs:
         with:
           python-version: '3.10'
 
-      # تنظیمات گیت (الزامی برای کامیت و پوش)
-      - name: Configure Git
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-      # اجرای اسکریپت تفسیر و پوش کردن بلافاصله
       - name: Run Tafsir Builder
         run: python builder_tafsir.py
 
-      - name: Commit and Push Tafsir
-        run: |
-          # اگر اسکریپت شما فایل زیپ می‌سازد، فایل زیپ را اد کنید
-          git add quran_tafsir_db.zip 
-          git commit -m "Add Tafsir data" || echo "No changes"
-          git push
-
-      # اجرای اسکریپت کورپوس و پوش کردن بلافاصله
       - name: Run Corpus Builder
         run: python builder_corpus.py
 
-      - name: Commit and Push Corpus
+      - name: Split Large ZIP files into 90MB chunks
         run: |
-          # اگر اسکریپت شما فایل زیپ می‌سازد، فایل زیپ را اد کنید
-          git add quran_corpus_db.zip
-          git commit -m "Add Corpus data" || echo "No changes"
-          git push
+          # ایجاد پوشه برای فایل‌های تکه‌تکه شده
+          mkdir -p db_chunks
+          
+          # تکه‌تکه کردن فایل تفسیر به قطعات 90 مگابایتی (برای عبور از محدودیت 100 مگابایت گیت‌هاب)
+          if [ -f quran_tafsir_db.zip ]; then
+            split -b 90M quran_tafsir_db.zip db_chunks/tafsir_part_
+            rm quran_tafsir_db.zip # حذف فایل اصلی بسیار مهم است تا گیت خطای حجم ندهد
+          fi
+          
+          # تکه‌تکه کردن فایل کورپوس
+          if [ -f quran_corpus_db.zip ]; then
+            split -b 90M quran_corpus_db.zip db_chunks/corpus_part_
+            rm quran_corpus_db.zip
+          fi
 
-      # ساخت Release نهایی (اختیاری، چون فایل‌ها پوش شده‌اند)
-      - name: Create Release and Upload Zips
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: final-db-v1
-          name: Quran Tafsir & Corpus Databases
-          files: |
-            quran_tafsir_db.zip
-            quran_corpus_db.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and Push chunks to Repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # اضافه کردن پوشه حاوی قطعات به گیت
+          git add db_chunks/
+          
+          git commit -m "Add split database chunks to source code"
+          git push
