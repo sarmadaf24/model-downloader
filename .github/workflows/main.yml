@@ -20,16 +20,13 @@ jobs:
       - name: Download Model
         run: |
           mkdir -p local_model
-          # دانلود مدل large-v2 مخصوص whisperx (CTranslate2 format)
-          huggingface-cli download Systran/faster-whisper-large-v2 --local-dir local_model --exclude "*.md" ".gitattributes"
+          python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='Systran/faster-whisper-large-v2', local_dir='local_model', ignore_patterns=['*.md', '.gitattributes'])"
 
       - name: Split large bin file
         run: |
           cd local_model
-          # فایل model.bin حدود 3 گیگابایت است. آن را به قطعات 90 مگابایتی تقسیم می‌کنیم
           if [ -f "model.bin" ]; then
             split -b 90M model.bin model_part_
-            # حذف فایل اصلی برای جلوگیری از خطای حجم گیت‌هاب
             rm model.bin
           fi
 
@@ -39,7 +36,6 @@ jobs:
           git config --global user.email "action@github.com"
           git add local_model/
           git commit -m "Add Whisper large-v2 model chunks" || echo "No changes to commit"
-          # ارسال فایل‌ها به ریپازیتوری
           git push origin HEAD:main || true
 
       - name: Create Tag for Source Code ZIP
