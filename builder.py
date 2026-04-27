@@ -2,6 +2,7 @@ import os
 import requests
 import json
 import time
+import zipfile
 
 # ==========================================
 # Configuration
@@ -108,11 +109,20 @@ for trans in transliterations:
     download_edition(trans, "transliterations", "transliterations")
 
 # ==========================================
-# Save Aggregated Database
+# Save Aggregated Database & Compress
 # ==========================================
 print("Saving aggregated database...")
-with open("data/merged/quran_full_db.json", 'w', encoding='utf-8') as f:
+db_path = "data/merged/quran_full_db.json"
+with open(db_path, 'w', encoding='utf-8') as f:
     json.dump(full_db, f, ensure_ascii=False, indent=2)
+
+print("Compressing the large database file...")
+zip_path = "data/merged/quran_full_db.zip"
+with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    zipf.write(db_path, "quran_full_db.json")
+
+# حذف فایل اصلی برای جلوگیری از خطای ۱۰۰ مگابایت گیت‌هاب
+os.remove(db_path)
 
 # ==========================================
 # Download Fonts
