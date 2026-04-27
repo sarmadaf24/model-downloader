@@ -33,16 +33,30 @@ jobs:
             rm model.bin
           fi
 
-      - name: Commit and Push to Repo
+      - name: Commit and push model chunks incrementally
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git add local_model/
-          git commit -m "Add Whisper large-v2 model chunks" || echo "No changes to commit"
-          git push origin HEAD:main || true
+          
+          # افزایش بافر گیت برای جلوگیری از قطعی
+          git config http.postBuffer 524288000
+          
+          echo "Starting incremental push..."
+          
+          # فایل‌های متنی و سبک را اول کامیت و پوش می‌کنیم
+          git add local_model/config.json local_model/tokenizer.json local_model/vocabulary.txt || true
+          git commit -m "Add config files" || true
+          git push origin main || true
+          
+          # حالا پارت‌های مدل را یکی یکی کامیت و پوش می‌کنیم
+          for file in local_model/model_part_*; do
+            echo "Pushing $file..."
+            git add "$file"
+            git commit -m "Add $file"
+            git push origin main
+          done
+          
+          # در نهایت تگ را می‌سازیم تا Source code (zip) برای شما آماده شود
+          git tag model-v1
+          git push origin model-v1
 
-      - name: Create Tag for Source Code ZIP
-        run: |
-          TAG_NAME="model-large-v2-$(date +%s)"
-          git tag $TAG_NAME
-          git push origin $TAG_NAME
