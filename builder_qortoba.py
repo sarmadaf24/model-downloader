@@ -51,7 +51,7 @@ def process_tafsir_dir(tafsir_dir_name):
         return None
 
     # Find all XML files that look like suras (e.g., abdu_001.xml)
-    sura_files = [f for f in os.listdir(tafsir_path) if f.endswith('.xml')]
+    sura_files = [f for f in os.listdir(tafsir_path) if f.endswith('.xml') and f != "front.xml"]
     
     if not sura_files:
         return None
