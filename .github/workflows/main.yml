@@ -1,64 +1,49 @@
-name: Put Wheels inside Source Code (Resumable)
-on: workflow_dispatch
-
-permissions:
-  contents: write
+name: Download Whisper Model Local
+on:
+  workflow_dispatch:
 
 jobs:
-  build:
+  download-and-pack:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Configure Git
-        run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
-          git config --global http.postBuffer 524288000
-
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Download Wheels using PIP
-        run: |
-          python -m pip install --upgrade pip
-          echo "Downloading correct wheels automatically..."
-          pip download --index-url https://download.pytorch.org/whl/cu121 torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --platform win_amd64 --python-version 3.10 --only-binary=:all: --no-deps
+      - name: Install huggingface_hub
+        run: pip install huggingface_hub
 
-      - name: Split and Push (Resumable)
+      - name: Download Model
         run: |
-          mkdir -p temp_chunks
-          mkdir -p pytorch_files
-          
-          echo "Splitting files..."
-          TORCH_WHL=$(ls torch-2*.whl | head -n 1)
-          split -b 90M "$TORCH_WHL" temp_chunks/torch_part_
-          
-          mv torchvision*.whl temp_chunks/ || true
-          mv torchaudio*.whl temp_chunks/ || true
-          rm "$TORCH_WHL"
-          
-          for file in temp_chunks/*; do
-            filename=$(basename "$file")
-            if [ -f "pytorch_files/$filename" ]; then
-              echo "🟢 $filename already exists. Skipping..."
-            else
-              echo "🟡 Uploading $filename..."
-              cp "$file" "pytorch_files/$filename"
-              git add "pytorch_files/$filename"
-              # جلوگیری از توقف در صورت نبود تغییرات
-              git commit -m "Add chunk $filename" || echo "Nothing to commit"
-              # استفاده از HEAD به جای main تا روی هر برنچی کار کند
-              git push origin HEAD || echo "Push failed, moving to next"
-            fi
-          done
+          mkdir -p local_model
+          # دانلود مدل large-v2 مخصوص whisperx (CTranslate2 format)
+          huggingface-cli download Systran/faster-whisper-large-v2 --local-dir local_model --exclude "*.md" ".gitattributes"
 
-
-      - name: Create Tag for Source Code Zip
+      - name: Split large bin file
         run: |
-          TAG="v$(date +%s)"
-          git tag $TAG
-          git push origin $TAG
+          cd local_model
+          # فایل model.bin حدود 3 گیگابایت است. آن را به قطعات 90 مگابایتی تقسیم می‌کنیم
+          if [ -f "model.bin" ]; then
+            split -b 90M model.bin model_part_
+            # حذف فایل اصلی برای جلوگیری از خطای حجم گیت‌هاب
+            rm model.bin
+          fi
+
+      - name: Commit and Push to Repo
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add local_model/
+          git commit -m "Add Whisper large-v2 model chunks" || echo "No changes to commit"
+          # ارسال فایل‌ها به ریپازیتوری
+          git push origin HEAD:main || true
+
+      - name: Create Tag for Source Code ZIP
+        run: |
+          TAG_NAME="model-large-v2-$(date +%s)"
+          git tag $TAG_NAME
+          git push origin $TAG_NAME
