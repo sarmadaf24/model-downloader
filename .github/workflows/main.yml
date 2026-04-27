@@ -52,7 +52,6 @@ jobs:
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git pull
           
           # Add the split parts if they exist
           git add qortoba_tafsirs_db.zip.part* || echo "No split parts for Qortoba tafsir to add."
@@ -63,7 +62,10 @@ jobs:
           # Check if there are any changes to commit
           if ! git diff-index --quiet HEAD; then
             git commit -m "Auto-update Qortoba tafsir data package"
+            # در صورت نیاز به پول کردن قبل از پوش، از دستور زیر استفاده می‌شود
+            git pull --rebase origin main
             git push
           else
             echo "No changes to commit."
           fi
+
