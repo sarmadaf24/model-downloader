@@ -1,10 +1,8 @@
 name: Build Full Quranic Text & Font Data Pack
 
 on:
-  # این اکشن را به صورت دستی اجرا کنید
   workflow_dispatch:
 
-# اجازه نوشتن در ریپازیتوری را به اکشن می‌دهد
 permissions:
   contents: write
 
@@ -15,42 +13,36 @@ jobs:
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 2. Configure Git for Committing
+      - name: 2. Configure Git
         run: |
           git config --global user.name "GitHub Action Bot"
           git config --global user.email "action-bot@github.com"
 
-      - name: 3. Download All Raw Data from Stable GitHub Sources
+      - name: 3. Create Directories
+        run: mkdir -p raw_data/texts_repo raw_data/translations_repo raw_data/fonts data/texts/individual data/texts/combined data/translations/individual data/translations/combined data/word-by-word fonts
+
+      - name: 4. Clone Tanzil Texts
+        run: git clone --depth 1 https://github.com/tanzil/quran-text.git raw_data/texts_repo
+
+      - name: 5. Clone Tanzil Translations
+        run: git clone --depth 1 https://github.com/tanzil/quran-translation.git raw_data/translations_repo
+
+      - name: 6. Download Word-by-Word Data
+        run: wget -v -O raw_data/quranic-corpus-morphology-0.4.txt https://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt || echo "Word-by-word download failed"
+
+      - name: 7. Download Fonts
         run: |
-          echo ">>> Preparing to download all raw data..."
-          mkdir -p raw_data/texts_repo raw_data/translations_repo raw_data/fonts
+          wget -v -O raw_data/fonts/NotoNaskhArabic-Regular.ttf https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf
+          wget -v -O raw_data/fonts/Amiri.zip https://github.com/alif-type/amiri/releases/download/1.000/Amiri-1.000.zip
+          wget -v -O raw_data/fonts/uthman-taha.zip https://github.com/makkuk/KFGQPC-Uthman-Taha-Naskh/archive/refs/heads/main.zip
 
-          echo ">>> Cloning official Tanzil Quran text repository from GitHub..."
-          git clone --depth 1 https://github.com/tanzil/quran-text.git raw_data/texts_repo
-
-          echo ">>> Cloning official Tanzil Quran translation repository from GitHub..."
-          git clone --depth 1 https://github.com/tanzil/quran-translation.git raw_data/translations_repo
-          
-          echo ">>> Downloading word-by-word data..."
-          wget -P raw_data/ https://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt
-
-          echo ">>> Downloading fonts..."
-          wget -P raw_data/fonts/ https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf
-          wget -P raw_data/fonts/ https://github.com/alif-type/amiri/releases/download/1.000/Amiri-1.000.zip
-          # --- خط اصلاح شده اینجاست ---
-          wget -P raw_data/fonts/ https://github.com/makkuk/KFGQPC-Uthman-Taha-Naskh/archive/refs/heads/main.zip -O raw_data/fonts/uthman-taha.zip
-
-      - name: 4. Process Data and Convert to JSON
+      - name: 8. Process Data and Convert to JSON
         run: |
-          echo ">>> Preparing output directories..."
-          mkdir -p data/texts/individual data/texts/combined \
-                   data/translations/individual data/translations/combined \
-                   data/word-by-word fonts
-
-          # --- اسکریپت‌های پایتون برای پردازش (بدون تغییر) ---
+          # اسکریپت پایتون برای تبدیل فرمت
           cat <<'EOF' > tanzil_to_json.py
-          import sys, json
+          import sys, json, os
           def convert_to_json(input_file, output_file):
+              if not os.path.exists(input_file): return
               data = []
               with open(input_file, 'r', encoding='utf-8') as f:
                   for line in f:
@@ -59,13 +51,13 @@ jobs:
                       if len(parts) >= 3:
                           try:
                               data.append({'sura': int(parts[0]), 'ayah': int(parts[1]), 'text': '|'.join(parts[2:])})
-                          except (ValueError, IndexError):
-                              print(f"Skipping malformed line: {line.strip()}")
+                          except: continue
               with open(output_file, 'w', encoding='utf-8') as f:
                   json.dump(data, f, ensure_ascii=False, indent=2)
           if __name__ == "__main__": convert_to_json(sys.argv[1], sys.argv[2])
           EOF
 
+          # اسکریپت ترکیب فایل‌ها
           cat <<'EOF' > combine_json.py
           import sys, json, os
           def combine_files(input_dir, output_file):
@@ -73,54 +65,29 @@ jobs:
               for filename in sorted(os.listdir(input_dir)):
                   if filename.endswith(".json"):
                       key = os.path.splitext(filename)[0]
-                      filepath = os.path.join(input_dir, filename)
-                      with open(filepath, 'r', encoding='utf-8') as f:
+                      with open(os.path.join(input_dir, filename), 'r', encoding='utf-8') as f:
                           combined_data[key] = json.load(f)
               with open(output_file, 'w', encoding='utf-8') as f:
                   json.dump(combined_data, f, ensure_ascii=False, indent=2)
           if __name__ == "__main__": combine_files(sys.argv[1], sys.argv[2])
           EOF
-          
-          # --- شروع پردازش ---
-          echo ">>> Processing Quran Texts from cloned repository..."
+
+          # پردازش متون
           for file in raw_data/texts_repo/*.txt; do
-            filename=$(basename "$file" .txt)
-            python tanzil_to_json.py "$file" "data/texts/individual/${filename}.json"
+            python tanzil_to_json.py "$file" "data/texts/individual/$(basename "$file" .txt).json"
           done
           python combine_json.py data/texts/individual data/texts/combined/texts-all.json
 
-          echo ">>> Processing ALL Translations from cloned repository..."
+          # پردازش ترجمه‌ها
           for file in raw_data/translations_repo/*.txt; do
-            filename=$(basename "$file" .txt)
-            python tanzil_to_json.py "$file" "data/translations/individual/${filename}.json"
+            python tanzil_to_json.py "$file" "data/translations/individual/$(basename "$file" .txt).json"
           done
           python combine_json.py data/translations/individual data/translations/combined/translations-all.json
 
-          echo ">>> Processing Word-by-Word Data..."
+          # پردازش Word-by-Word
           python tanzil_to_json.py raw_data/quranic-corpus-morphology-0.4.txt data/word-by-word/quran-corpus.json
-          
-          echo ">>> Processing Fonts..."
-          unzip -o "raw_data/fonts/uthman-taha.zip" -d raw_data/fonts/ # Unzip the corrected file
-          unzip -o "raw_data/fonts/Amiri-1.000.zip" -d raw_data/fonts/ # Unzip Amiri font
-          mv raw_data/fonts/*.ttf fonts/
-          find fonts -mindepth 2 -type f -exec mv {} fonts/ \;
-          find fonts -type d -empty -delete
 
-      - name: 5. Commit All Processed Data to Repository
-        run: |
-          git add data/ fonts/
-          if ! git diff-index --quiet HEAD; then
-            git commit -m "Build: Create/Update full Quranic text & font data pack"
-            git push
-          else
-            echo "No changes to commit. Data is up-to-date."
-          fi
-
-      - name: 6. Create a New Tag for Download
-        run: |
-          TAG="data-pack-$(date +%Y%m%d-%H%M%S)"
-          echo "Creating tag: $TAG"
-          git tag $TAG
-          git push origin $TAG
-          echo "SUCCESS: Tag ${TAG} created successfully."
-          echo "You can now go to the 'Tags' page and download the 'Source code (zip)' file."
+          # استخراج فونت‌ها
+          unzip -o "raw_data/fonts/*.zip" -d fonts/ || true
+          cp raw_data/fonts/*.ttf fonts/ || true
+          find fonts -name "*.ttf" -exec mv {}
