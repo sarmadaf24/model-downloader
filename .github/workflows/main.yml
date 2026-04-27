@@ -1,4 +1,4 @@
-name: Build Quranic Data Pack (Texts, Translations, Fonts)
+name: Build Quranic Data Pack From GitHub Source
 
 on:
   workflow_dispatch:
@@ -10,91 +10,75 @@ jobs:
   build-data-pack:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout Processor Repository (This one)
         uses: actions/checkout@v4
+        with:
+          path: processor # چک‌اوت ریپازیتوری فعلی در پوشه processor
+
+      # --- مرحله کلیدی جدید ---
+      - name: Checkout Raw Data Source Repository
+        uses: actions/checkout@v4
+        with:
+          # آدرس ریپازیتوری منبع داده را اینجا وارد کنید
+          # مثلا: YourUsername/quran-raw-data
+          repository: YOUR_USERNAME/quran-raw-data
+          path: raw_data # دانلود سورس داده‌ها در پوشه raw_data
 
       - name: Configure Git
         run: |
+          cd processor # برو به پوشه ریپازیتوری اصلی
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
+          cd ..
 
       - name: Setup Environment and Create Directories
         run: |
-          sudo apt-get update && sudo apt-get install -y wget unzip
-          mkdir -p data/texts/individual data/texts/combined \
-                   data/translations/individual data/translations/combined \
-                   data/word-by-word data/transliterations fonts
+          mkdir -p processor/data/texts/individual processor/data/texts/combined \
+                   processor/data/translations/individual processor/data/translations/combined \
+                   processor/data/word-by-word processor/data/transliterations processor/fonts
 
+      # اسکریپت‌های پایتون بدون تغییر باقی می‌مانند
       - name: Create Python Processing Scripts
+        working-directory: processor
         run: |
-          # Script 1: Converts Tanzil text files (like quran-uthmani.txt) to JSON
+          # Script 1: Converts Tanzil text files to JSON
           cat <<'EOF' > tanzil_to_json.py
-          import sys
-          import json
-
+          import sys, json
           def convert_to_json(input_file, output_file):
               data = []
               with open(input_file, 'r', encoding='utf-8') as f:
                   for line in f:
-                      if line.strip().startswith('#') or not line.strip():
-                          continue
+                      if line.strip().startswith('#') or not line.strip(): continue
                       parts = line.strip().split('|')
                       if len(parts) >= 3:
-                          try:
-                            sura = int(parts[0])
-                            ayah = int(parts[1])
-                            text = '|'.join(parts[2:])
-                            data.append({'sura': sura, 'ayah': ayah, 'text': text})
-                          except ValueError:
-                            print(f"Skipping malformed line: {line.strip()}")
-              
+                          data.append({'sura': int(parts[0]), 'ayah': int(parts[1]), 'text': '|'.join(parts[2:])})
               with open(output_file, 'w', encoding='utf-8') as f:
                   json.dump(data, f, ensure_ascii=False, indent=2)
-
-          if __name__ == "__main__":
-              convert_to_json(sys.argv[1], sys.argv[2])
+          if __name__ == "__main__": convert_to_json(sys.argv[1], sys.argv[2])
           EOF
 
           # Script 2: Converts Quran Corpus data to structured JSON
           cat <<'EOF' > corpus_to_json.py
-          import sys
-          import json
-
+          import sys, json
           def convert_corpus_to_json(input_file, output_file):
               data = {}
               with open(input_file, 'r', encoding='utf-8') as f:
                   for line in f:
                       if line.strip().startswith('('):
                           parts = line.strip().split('\t')
-                          location = parts[0][1:-1].split(':')
-                          sura, ayah, word, segment = map(int, location)
-                          features = parts[1:]
-                          
-                          if sura not in data:
-                              data[sura] = {}
-                          if ayah not in data[sura]:
-                              data[sura][ayah] = {}
-                          if word not in data[sura][ayah]:
-                              data[sura][ayah][word] = []
-                          
-                          data[sura][ayah][word].append({
-                              'segment': segment,
-                              'features': features
-                          })
-              
+                          loc = parts[0][1:-1].split(':'); sura, ayah, word, seg = map(int, loc)
+                          if sura not in data: data[sura] = {}
+                          if ayah not in data[sura]: data[sura][ayah] = {}
+                          if word not in data[sura][ayah]: data[sura][ayah][word] = []
+                          data[sura][ayah][word].append({'segment': seg, 'features': parts[1:]})
               with open(output_file, 'w', encoding='utf-8') as f:
                   json.dump(data, f, ensure_ascii=False, indent=2)
-
-          if __name__ == "__main__":
-              convert_corpus_to_json(sys.argv[1], sys.argv[2])
+          if __name__ == "__main__": convert_corpus_to_json(sys.argv[1], sys.argv[2])
           EOF
           
-          # Script 3: Combines individual JSON files into a single master JSON
+          # Script 3: Combines individual JSON files
           cat <<'EOF' > combine_json.py
-          import sys
-          import json
-          import os
-
+          import sys, json, os
           def combine_files(input_dir, output_file):
               combined_data = {}
               for filename in os.listdir(input_dir):
@@ -103,67 +87,52 @@ jobs:
                       filepath = os.path.join(input_dir, filename)
                       with open(filepath, 'r', encoding='utf-8') as f:
                           combined_data[key] = json.load(f)
-              
               with open(output_file, 'w', encoding='utf-8') as f:
                   json.dump(combined_data, f, ensure_ascii=False, indent=2)
-          
-          if __name__ == "__main__":
-              combine_files(sys.argv[1], sys.argv[2])
+          if __name__ == "__main__": combine_files(sys.argv[1], sys.argv[2])
           EOF
 
-      - name: Fetch and Process All Data
+      - name: Process Data From Local Raw Source
+        working-directory: processor # تمام دستورات در پوشه ریپازیتوری اصلی اجرا می‌شوند
         run: |
-          # --- 1. Quran Texts ---
-          echo "Processing Quran texts..."
-          TEXT_TYPES="quran-uthmani quran-uthmani-min quran-simple quran-simple-clean quran-indopak"
-          for type in $TEXT_TYPES; do
-            wget -q http://tanzil.net/res/text/plain/${type}.txt -O ${type}.txt
-            python tanzil_to_json.py ${type}.txt data/texts/individual/${type}.json
-            rm ${type}.txt
-          done
+          RAW_PATH="../raw_data" # مسیر به پوشه داده‌های خام
+          
+          echo "Processing Quran texts from $RAW_PATH..."
+          python tanzil_to_json.py $RAW_PATH/quran-uthmani.txt data/texts/individual/quran-uthmani.json
+          python tanzil_to_json.py $RAW_PATH/quran-uthmani-min.txt data/texts/individual/quran-uthmani-min.json
+          python tanzil_to_json.py $RAW_PATH/quran-simple.txt data/texts/individual/quran-simple.json
+          python tanzil_to_json.py $RAW_PATH/quran-simple-clean.txt data/texts/individual/quran-simple-clean.json
+          python tanzil_to_json.py $RAW_PATH/quran-indopak.txt data/texts/individual/quran-indopak.json
           python combine_json.py data/texts/individual data/texts/combined/texts-all.json
 
-          # --- 2. Translations (Add more as needed) ---
-          echo "Processing translations..."
-          # This is a sample list. The full list from Tanzil.net is very long.
-          TRANS_CODES="en.sahih en.pickthall fa.fooladvand fa.makarem ur.jalandhry tr.yildirim"
-          for code in $TRANS_CODES; do
-            wget -q http://tanzil.net/trans/plain/${code}.txt -O ${code}.txt
-            python tanzil_to_json.py ${code}.txt data/translations/individual/${code}.json
-            rm ${code}.txt
-          done
+          echo "Processing translations from $RAW_PATH..."
+          python tanzil_to_json.py $RAW_PATH/fa.fooladvand.txt data/translations/individual/fa.fooladvand.json
+          python tanzil_to_json.py $RAW_PATH/en.sahih.txt data/translations/individual/en.sahih.json
           python combine_json.py data/translations/individual data/translations/combined/translations-all.json
+          
+          echo "Processing Quranic Corpus data from $RAW_PATH..."
+          python corpus_to_json.py $RAW_PATH/quranic-corpus-morphology-0.4.txt data/word-by-word/quran-corpus.json
+          
+          echo "Processing Transliteration from $RAW_PATH..."
+          python tanzil_to_json.py $RAW_PATH/en.transliteration.buckwalter.txt data/transliterations/en.transliteration.json
 
-          # --- 3. Word-by-Word (Quranic Corpus) ---
-          echo "Processing Quranic Corpus data..."
-          wget -q http://tanzil.net/res/text/corpus/quranic-corpus-morphology-0.4.txt -O corpus.txt
-          python corpus_to_json.py corpus.txt data/word-by-word/quran-corpus.json
-          rm corpus.txt
-
-          # --- 4. Transliteration ---
-          echo "Processing Transliteration..."
-          wget -q http://tanzil.net/res/text/trans/en.transliteration.buckwalter.txt -O trans.txt
-          python tanzil_to_json.py trans.txt data/transliterations/en.transliteration.json
-          rm trans.txt
-
-          # --- 5. Fonts ---
-          echo "Downloading fonts..."
-          wget -q https://fonts.qurancomplex.gov.sa/wp-content/uploads/2021/08/KFGQPC-Uthman-Taha-Naskh-Regular.zip -O font1.zip
-          unzip -o font1.zip -d fonts/ && rm font1.zip
-          wget -q https://github.com/alif-type/amiri/releases/download/1.000/Amiri-1.000.zip -O font2.zip
-          unzip -o font2.zip -d fonts/ && rm font2.zip
+          echo "Unpacking fonts from $RAW_PATH..."
+          unzip -o $RAW_PATH/KFGQPC-Uthman-Taha-Naskh-Regular.zip -d fonts/
+          unzip -o $RAW_PATH/Amiri-1.000.zip -d fonts/
 
       - name: Commit and Push to Repository
+        working-directory: processor
         run: |
           git add data/ fonts/
           if ! git diff-index --quiet HEAD; then
-            git commit -m "Update: Build Quranic data pack [$(date)]"
+            git commit -m "Update: Build Quranic data pack from local source [$(date)]"
             git push
           else
             echo "No changes to commit."
           fi
 
       - name: Create Tag for Source Code Zip Download
+        working-directory: processor
         run: |
           TAG="data-pack-$(date +%Y%m%d-%H%M%S)"
           git tag $TAG
