@@ -20,50 +20,36 @@ jobs:
           git config --global user.name "GitHub Action Bot"
           git config --global user.email "action-bot@github.com"
 
-      - name: 3. Download All Raw Data from Internet
+      - name: 3. Download All Raw Data from Stable GitHub Sources
         run: |
           echo ">>> Preparing to download all raw data..."
-          mkdir -p raw_data/texts raw_data/translations raw_data/word-by-word raw_data/fonts
+          mkdir -p raw_data/texts_repo raw_data/translations_repo raw_data/fonts
 
-          # استفاده از User-Agent برای جلوگیری از بلاک شدن توسط سرور
-          USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-          
-          echo ">>> Downloading Quran texts..."
-          wget --user-agent="$USER_AGENT" -P raw_data/texts/ http://tanzil.net/res/text/download/quran-uthmani.txt
-          wget --user-agent="$USER_AGENT" -P raw_data/texts/ http://tanzil.net/res/text/download/quran-uthmani-min.txt
-          wget --user-agent="$USER_AGENT" -P raw_data/texts/ http://tanzil.net/res/text/download/quran-simple.txt
-          wget --user-agent="$USER_AGENT" -P raw_data/texts/ http://tanzil.net/res/text/download/quran-simple-clean.txt
-          wget --user-agent="$USER_AGENT" -P raw_data/texts/ http://tanzil.net/res/text/download/quran-indopak.txt
-          
-          echo ">>> Downloading list of all translations..."
-          wget --user-agent="$USER_AGENT" -O raw_data/translations/project.xml http://tanzil.net/trans/project.xml
-          
-          echo ">>> Downloading ALL available translations..."
-          # استخراج نام فایل تمام ترجمه‌ها از project.xml و دانلود آن‌ها
-          grep -oP 'id="\K[^"]+' raw_data/translations/project.xml | while read -r trans_id; do
-            echo "Downloading translation: $trans_id"
-            wget --user-agent="$USER_AGENT" -P raw_data/translations/ "http://tanzil.net/trans/download/${trans_id}.zip"
-            # اکسترکت کردن و حذف فایل زیپ
-            unzip -o "raw_data/translations/${trans_id}.zip" -d "raw_data/translations/"
-            rm "raw_data/translations/${trans_id}.zip"
-          done
+          echo ">>> Cloning official Tanzil Quran text repository from GitHub..."
+          # به جای wget، کل ریپازیتوری متون را از گیت‌هاب کلون می‌کنیم
+          git clone --depth 1 https://github.com/tanzil/quran-text.git raw_data/texts_repo
 
+          echo ">>> Cloning official Tanzil Quran translation repository from GitHub..."
+          # کل ریپازیتوری ترجمه‌ها را نیز از گیت‌هاب کلون می‌کنیم
+          git clone --depth 1 https://github.com/tanzil/quran-translation.git raw_data/translations_repo
+          
           echo ">>> Downloading word-by-word data..."
-          wget --user-agent="$USER_AGENT" -P raw_data/word-by-word/ http://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt
+          # این لینک هنوز معتبر است
+          wget -P raw_data/ https://corpus.quran.com/download/quranic-corpus-morphology-0.4.txt
 
           echo ">>> Downloading fonts..."
-          wget --user-agent="$USER_AGENT" -P raw_data/fonts/ https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf
-          wget --user-agent="$USER_AGENT" -P raw_data/fonts/ https://github.com/alif-type/amiri/releases/download/1.000/Amiri-1.000.zip
-          wget --user-agent="$USER_AGENT" -P raw_data/fonts/ https://github.com/makkuk/KFGQPC-Uthman-Taha-Naskh/archive/refs/heads/master.zip -O raw_data/fonts/uthman-taha.zip
+          wget -P raw_data/fonts/ https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Regular.ttf
+          wget -P raw_data/fonts/ https://github.com/alif-type/amiri/releases/download/1.000/Amiri-1.000.zip
+          wget -P raw_data/fonts/ https://github.com/makkuk/KFGQPC-Uthman-Taha-Naskh/archive/refs/heads/master.zip -O raw_data/fonts/uthman-taha.zip
 
       - name: 4. Process Data and Convert to JSON
         run: |
           echo ">>> Preparing output directories..."
           mkdir -p data/texts/individual data/texts/combined \
                    data/translations/individual data/translations/combined \
-                   data/word-by-word data/transliterations fonts
+                   data/word-by-word fonts
 
-          # --- اسکریپت‌های پایتون برای پردازش ---
+          # --- اسکریپت‌های پایتون برای پردازش (بدون تغییر) ---
           cat <<'EOF' > tanzil_to_json.py
           import sys, json
           def convert_to_json(input_file, output_file):
@@ -98,34 +84,33 @@ jobs:
           EOF
           
           # --- شروع پردازش ---
-          echo ">>> Processing Quran Texts..."
-          for file in raw_data/texts/*.txt; do
+          echo ">>> Processing Quran Texts from cloned repository..."
+          for file in raw_data/texts_repo/*.txt; do
             filename=$(basename "$file" .txt)
             python tanzil_to_json.py "$file" "data/texts/individual/${filename}.json"
           done
           python combine_json.py data/texts/individual data/texts/combined/texts-all.json
 
-          echo ">>> Processing Translations..."
-          for file in raw_data/translations/*.txt; do
+          echo ">>> Processing ALL Translations from cloned repository..."
+          # حالا فایل‌ها را از پوشه کلون شده می‌خوانیم
+          for file in raw_data/translations_repo/*.txt; do
             filename=$(basename "$file" .txt)
             python tanzil_to_json.py "$file" "data/translations/individual/${filename}.json"
           done
           python combine_json.py data/translations/individual data/translations/combined/translations-all.json
 
           echo ">>> Processing Word-by-Word Data..."
-          python tanzil_to_json.py raw_data/word-by-word/quranic-corpus-morphology-0.4.txt data/word-by-word/quran-corpus.json
+          python tanzil_to_json.py raw_data/quranic-corpus-morphology-0.4.txt data/word-by-word/quran-corpus.json
           
           echo ">>> Processing Fonts..."
           unzip -o "raw_data/fonts/*.zip" -d fonts/
           mv raw_data/fonts/*.ttf fonts/
-          # تمیزکاری فایل‌های اضافی فونت
           find fonts -mindepth 2 -type f -exec mv {} fonts/ \;
           find fonts -type d -empty -delete
 
       - name: 5. Commit All Processed Data to Repository
         run: |
           git add data/ fonts/
-          # فقط در صورتی کامیت کن که تغییری وجود داشته باشد
           if ! git diff-index --quiet HEAD; then
             git commit -m "Build: Create/Update full Quranic text & font data pack"
             git push
@@ -135,10 +120,9 @@ jobs:
 
       - name: 6. Create a New Tag for Download
         run: |
-          # ساخت یک تگ منحصر به فرد بر اساس تاریخ و زمان
           TAG="data-pack-$(date +%Y%m%d-%H%M%S)"
           echo "Creating tag: $TAG"
           git tag $TAG
           git push origin $TAG
           echo "SUCCESS: Tag ${TAG} created successfully."
-          echo "You can now go to the 'Tags' page of your repository and download the 'Source code (zip)' file."
+          echo "You can now go to the 'Tags' page and download the 'Source code (zip)' file."
