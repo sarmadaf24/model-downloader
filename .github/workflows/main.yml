@@ -20,9 +20,11 @@ jobs:
         with:
           python-version: '3.10'
       
-      - name: Run Qortoba XML Tafsir Builder
-        id: builder
-        run: python builder_qortoba.py
+      - name: Run Qortoba Builder
+        run: |
+          pip install xmltodict
+          python builder_qortoba.py
+
 
       - name: List files to check for output
         run: ls -lh
