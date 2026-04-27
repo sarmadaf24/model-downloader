@@ -1,118 +1,72 @@
-# File: builder_qortoba.py
-
 import os
+import glob
 import json
 import zipfile
-import subprocess
+import xmltodict
 import shutil
-import xml.etree.ElementTree as ET
-from concurrent.futures import ThreadPoolExecutor
 
-# --- Configuration ---
 REPO_URL = "https://github.com/qortoba/tafsirs.git"
 CLONE_DIR = "qortoba_tafsirs_repo"
-OUTPUT_JSON = "qortoba_tafsirs_db.json"
 OUTPUT_ZIP = "qortoba_tafsirs_db.zip"
 
-def clone_repo():
-    """Clones the specified git repository into the CLONE_DIR."""
-    print(f"Cloning repository: {REPO_URL}...")
-    if os.path.exists(CLONE_DIR):
-        print(f"Removing existing directory: {CLONE_DIR}")
-        shutil.rmtree(CLONE_DIR)
-    # Using --depth 1 for a shallow clone to save time and space
-    subprocess.run(["git", "clone", "--depth", "1", REPO_URL, CLONE_DIR], check=True)
-    print("Repository cloned successfully.")
-
-def parse_sura_xml(sura_path):
-    """Parses a single Sura XML file and extracts ayahs."""
-    try:
-        tree = ET.parse(sura_path)
-        root = tree.getroot()
-        sura_node = root.find("sura")
-        if sura_node is None:
-            return None, {}
-        sura_index = sura_node.get("index")
-        ayahs = {ayah.get("index"): ayah.get("text") for ayah in sura_node.findall("aya") if ayah.get("index") and ayah.get("text")}
-        return sura_index, ayahs
-    except ET.ParseError as e:
-        print(f"  [Warning] Could not parse XML file: {os.path.basename(sura_path)}. Error: {e}")
-        return None, {}
-    except Exception as e:
-        print(f"  [Error] An unexpected error occurred while processing {os.path.basename(sura_path)}. Error: {e}")
-        return None, {}
-
-def process_tafsir_dir(tafsir_dir_name):
-    """Processes a single tafsir directory, parsing all its Sura XML files."""
-    tafsir_path = os.path.join(CLONE_DIR, 'content', tafsir_dir_name)
+def process_qortoba():
+    # 1. Clone the repository if it doesn't exist
+    if not os.path.exists(CLONE_DIR):
+        print(f"Cloning repository: {REPO_URL}...")
+        os.system(f"git clone {REPO_URL} {CLONE_DIR}")
     
-    # Skip non-directories or hidden folders
-    if not os.path.isdir(tafsir_path) or tafsir_dir_name.startswith('.'):
-        return None
-
-    # Find all XML files that look like suras (e.g., abdu_001.xml)
-    sura_files = [f for f in os.listdir(tafsir_path) if f.endswith('.xml') and f != "front.xml"]
+    tafsir_data = {}
     
-    if not sura_files:
-        return None
+    # 2. Find all directories (tafsirs) in the cloned repo
+    base_path = os.path.join(CLONE_DIR, "tafsirs_content")
+    if not os.path.exists(base_path):
+        base_path = CLONE_DIR # Fallback in case of structure changes
 
-    print(f"  -> Processing tafsir: {tafsir_dir_name}")
-    tafsir_data = {"sura": {}}
-
-    for sura_file in sura_files:
-        sura_path = os.path.join(tafsir_path, sura_file)
-        sura_index, ayahs = parse_sura_xml(sura_path)
-        if sura_index and ayahs:
-            tafsir_data["sura"][sura_index] = ayahs
+    directories = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d)) and not d.startswith('.')]
     
-    # Return tafsir data only if it contains any processed suras
-    if tafsir_data["sura"]:
-        return tafsir_dir_name, tafsir_data
-    return None
-
-def main():
-    """Main function to orchestrate the cloning, processing, and packaging."""
-    try:
-        clone_repo()
-        all_tafsirs = {}
-        # The actual tafsir folders are inside the 'content' directory
-        content_path = os.path.join(CLONE_DIR, 'content')
-        if not os.path.exists(content_path):
-            print(f"Error: 'content' directory not found in the cloned repository.")
-            return
-
-        tafsir_dirs = os.listdir(content_path)
-        print(f"Found {len(tafsir_dirs)} potential tafsir directories. Starting parallel processing...")
-
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            results = executor.map(process_tafsir_dir, tafsir_dirs)
-
-        for result in results:
-            if result:
-                tafsir_id, tafsir_data = result
-                all_tafsirs[tafsir_id] = tafsir_data
+    print(f"Found {len(directories)} potential tafsir directories.")
+    
+    for tafsir_name in directories:
+        tafsir_dir = os.path.join(base_path, tafsir_name)
+        xml_files = glob.glob(os.path.join(tafsir_dir, "*.xml"))
         
-        if not all_tafsirs:
-            print("Warning: No tafsirs were processed. The output file will be empty.")
+        tafsir_content = []
+        for xml_file in xml_files:
+            # Ignore front.xml based on previous issues
+            if "front.xml" in xml_file.lower():
+                continue
+                
+            try:
+                with open(xml_file, 'r', encoding='utf-8') as f:
+                    xml_string = f.read()
+                    # Parse XML to Dictionary
+                    parsed_dict = xmltodict.parse(xml_string)
+                    tafsir_content.append({
+                        "file_name": os.path.basename(xml_file),
+                        "content": parsed_dict
+                    })
+            except Exception as e:
+                print(f"Error parsing {xml_file}: {e}")
+                
+        if tafsir_content:
+            tafsir_data[tafsir_name] = tafsir_content
+            print(f"  -> Successfully processed: {tafsir_name} ({len(tafsir_content)} files)")
         else:
-            print(f"Successfully processed {len(all_tafsirs)} tafsirs from Qortoba.")
+            print(f"  -> No valid XML data found for: {tafsir_name}")
 
-        print("Creating final JSON and ZIP files...")
-        with open(OUTPUT_JSON, 'w', encoding='utf-8') as f:
-            json.dump(all_tafsirs, f, ensure_ascii=False) # Removed indent for smaller file size
-        
-        with zipfile.ZipFile(OUTPUT_ZIP, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-            zf.write(OUTPUT_JSON)
-        
-        print(f"Successfully created {OUTPUT_ZIP}")
+    if not tafsir_data:
+        print("Warning: No tafsirs were processed. Check XML parsing logic.")
+        return
 
-    finally:
-        # Cleanup
-        print("Cleaning up temporary files and directories...")
-        if os.path.exists(CLONE_DIR):
-            shutil.rmtree(CLONE_DIR)
-        if os.path.exists(OUTPUT_JSON):
-            os.remove(OUTPUT_JSON)
+    # 3. Save to JSON and ZIP
+    print("Creating final JSON and ZIP files...")
+    with zipfile.ZipFile(OUTPUT_ZIP, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for tafsir, content in tafsir_data.items():
+            json_filename = f"{tafsir}.json"
+            json_str = json.dumps(content, ensure_ascii=False, indent=2)
+            zipf.writestr(json_filename, json_str)
+            
+    print(f"Successfully created {OUTPUT_ZIP}")
 
 if __name__ == "__main__":
-    main()
+    process_qortoba()
