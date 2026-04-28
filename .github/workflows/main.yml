@@ -1,10 +1,9 @@
-# File: .github/workflows/main.yml
+# .github/workflows/fetch-tafsirs.yml
 
-name: Quran Qortoba Data Builder
+name: Fetch Quran Tafsirs
 
+# این اکشن به صورت دستی اجرا می‌شود
 on:
-  push:
-    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -12,61 +11,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository code
+      # مرحله ۱: یک فولدر برای جمع‌آوری تفاسیر ایجاد می‌کنیم
+      - name: Create directory for tafsirs
+        run: mkdir ./collected-tafsirs
+
+      # مرحله ۲: مخزن اصلی داده‌های قرآن را دانلود می‌کنیم
+      - name: Checkout quran.com-data repository
         uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
-      
-      - name: Run Qortoba Builder
+          repository: 'quran/quran.com-data'
+          path: 'quran-data' # در این فولدر دانلود شود
+
+      # مرحله ۳: فولدرهای تفاسیر مورد نظر را در فولدر جمع‌آوری کپی می‌کنیم
+      # شما می‌توانید هر تعداد تفسیری که می‌خواهید را در اینجا اضافه کنید
+      - name: Copy Tafsir folders
         run: |
-          pip install xmltodict
-          python builder_qortoba.py
-
-      - name: List files to check for output
-        run: ls -lh
-
-      - name: Split Large Qortoba ZIP file into 90MB chunks
-        run: |
-          set -e
-          file="qortoba_tafsirs_db.zip"
-          if [ -f "$file" ]; then
-            # Ensure the file is not empty or too small before splitting
-            if [ $(stat -c%s "$file") -gt 1024 ]; then
-              echo "Splitting $file..."
-              split -b 90M "$file" "${file}.part"
-              rm "$file" # Remove original large file to save space
-            else
-              echo "Warning: $file is too small, skipping split. It will be committed as is."
-            fi
-          else
-            echo "Error: $file not found. The builder script might have failed."
-            exit 1 # Exit with an error to fail the job
-          fi
-
-      - name: List files after processing
-        run: ls -lh
-
-      - name: Commit and Push to repository
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          echo "Copying Tafsir Jalalayn..."
+          cp -r quran-data/data/tafsirs/ar/ar-tafsir-jalalayn ./collected-tafsirs/
           
-          # Add the split parts if they exist
-          git add qortoba_tafsirs_db.zip.part* || echo "No split parts for Qortoba tafsir to add."
+          echo "Copying Tafsir Al-Muyassar..."
+          cp -r quran-data/data/tafsirs/ar/ar-tafsir-al-muyassar ./collected-tafsirs/
           
-          # Add the original zip if it wasn't split (was too small)
-          git add qortoba_tafsirs_db.zip || echo "No small zip file for Qortoba tafsir to add."
+          echo "Copying Tafsir Ibn Kathir (English)..."
+          cp -r quran-data/data/tafsirs/en/en-tafsir-ibn-kathir ./collected-tafsirs/
 
-          # Check if there are any changes to commit
-          if ! git diff-index --quiet HEAD; then
-            git commit -m "Auto-update Qortoba tafsir data package"
-            # در صورت نیاز به پول کردن قبل از پوش، از دستور زیر استفاده می‌شود
-            git pull --rebase origin main
-            git push
-          else
-            echo "No changes to commit."
-          fi
+      # مرحله ۴: تمام فایل‌های جمع‌آوری شده را در یک فایل zip قرار می‌دهیم
+      - name: Zip the collected tafsirs
+        run: zip -r tafsirs-archive.zip ./collected-tafsirs
 
+      # مرحله ۵: فایل zip نهایی را به عنوان آرتیفکت آپلود می‌کنیم تا قابل دانلود باشد
+      - name: Upload Tafsir Archive as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: quran-tafsirs-db
+          path: tafsirs-archive.zip
