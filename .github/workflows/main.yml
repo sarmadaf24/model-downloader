@@ -3,7 +3,7 @@
 name: Fetch ALL Quran Tafsirs & Their Translations
 
 on:
-  # این اکشن را به صورت دستی اجرا کنید
+  # این اکشن را به صورت دستی و با یک کلیک اجرا کنید
   workflow_dispatch:
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
       - name: Zip the collected tafsirs directory
         run: zip -r all-tafsirs.zip ./tafsirs
 
-      # مرحله ۴: آپلود فایل زیپ نهایی به عنوان آرتیفکت
+      # مرحله ۴: آپلود فایل زیپ نهایی به عنوان آرتیفکت (فایل قابل دانلود)
       # این فایل در صفحه اکشن شما برای دانلود در دسترس خواهد بود.
       - name: Upload Tafsir Archive as Artifact
         uses: actions/upload-artifact@v4
