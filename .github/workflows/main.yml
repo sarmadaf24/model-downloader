@@ -1,35 +1,34 @@
-# نام فایل: .github/workflows/fetch-tafsirs.yml
-
-name: Fetch ALL Quran Tafsirs & Their Translations
+name: Build Tafsir and Corpus Databases
 
 on:
-  # این اکشن را به صورت دستی و با یک کلیک اجرا کنید
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      # مرحله ۱: دانلود کامل مخزن quran.com-data در یک پوشه موقت به نام quran-data
-      # از --depth 1 برای سرعت بیشتر استفاده می‌کنیم چون به تاریخچه تغییرات نیاز نداریم.
-      - name: Clone quran.com-data repository
-        run: git clone --depth 1 https://github.com/quran/quran.com-data.git quran-data
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      # مرحله ۲: کپی کردن فقط و فقط پوشه tafsirs
-      # این دستور کل پوشه data/tafsirs را با تمام محتویاتش در محل فعلی کپی می‌کند.
-      - name: Copy the entire 'tafsirs' directory
-        run: cp -r quran-data/data/tafsirs ./
-
-      # مرحله ۳: فشرده‌سازی پوشه کپی شده
-      # کل پوشه tafsirs را در یک فایل زیپ به نام all-tafsirs.zip قرار می‌دهد.
-      - name: Zip the collected tafsirs directory
-        run: zip -r all-tafsirs.zip ./tafsirs
-
-      # مرحله ۴: آپلود فایل زیپ نهایی به عنوان آرتیفکت (فایل قابل دانلود)
-      # این فایل در صفحه اکشن شما برای دانلود در دسترس خواهد بود.
-      - name: Upload Tafsir Archive as Artifact
-        uses: actions/upload-artifact@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          name: quran-tafsirs-database
-          path: all-tafsirs.zip
+          python-version: '3.10'
+
+      # اجرای اسکریپت تفسیر (فایل زیپ ساخته می‌شود ولی پوش نمی‌شود)
+      - name: Run Tafsir Builder
+        run: python builder_tafsir.py
+
+      # آپلود مستقیم فایل‌های زیپ در بخش Release
+      - name: Create Release and Upload Zips
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: final-db-${{ github.run_number }}
+          name: Quran Tafsir & Corpus Databases
+          files: |
+            quran_tafsir_db.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
