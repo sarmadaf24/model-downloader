@@ -1,9 +1,9 @@
-# .github/workflows/fetch-tafsirs.yml
+# نام فایل: .github/workflows/fetch-tafsirs.yml
 
-name: Fetch Quran Tafsirs
+name: Fetch ALL Quran Tafsirs & Their Translations
 
-# این اکشن به صورت دستی اجرا می‌شود
 on:
+  # این اکشن را به صورت دستی اجرا کنید
   workflow_dispatch:
 
 jobs:
@@ -11,37 +11,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # مرحله ۱: یک فولدر برای جمع‌آوری تفاسیر ایجاد می‌کنیم
-      - name: Create directory for tafsirs
-        run: mkdir ./collected-tafsirs
+      # مرحله ۱: دانلود کامل مخزن quran.com-data در یک پوشه موقت به نام quran-data
+      # از --depth 1 برای سرعت بیشتر استفاده می‌کنیم چون به تاریخچه تغییرات نیاز نداریم.
+      - name: Clone quran.com-data repository
+        run: git clone --depth 1 https://github.com/quran/quran.com-data.git quran-data
 
-      # مرحله ۲: مخزن اصلی داده‌های قرآن را دانلود می‌کنیم
-      - name: Checkout quran.com-data repository
-        uses: actions/checkout@v4
-        with:
-          repository: 'quran/quran.com-data'
-          path: 'quran-data' # در این فولدر دانلود شود
+      # مرحله ۲: کپی کردن فقط و فقط پوشه tafsirs
+      # این دستور کل پوشه data/tafsirs را با تمام محتویاتش در محل فعلی کپی می‌کند.
+      - name: Copy the entire 'tafsirs' directory
+        run: cp -r quran-data/data/tafsirs ./
 
-      # مرحله ۳: فولدرهای تفاسیر مورد نظر را در فولدر جمع‌آوری کپی می‌کنیم
-      # شما می‌توانید هر تعداد تفسیری که می‌خواهید را در اینجا اضافه کنید
-      - name: Copy Tafsir folders
-        run: |
-          echo "Copying Tafsir Jalalayn..."
-          cp -r quran-data/data/tafsirs/ar/ar-tafsir-jalalayn ./collected-tafsirs/
-          
-          echo "Copying Tafsir Al-Muyassar..."
-          cp -r quran-data/data/tafsirs/ar/ar-tafsir-al-muyassar ./collected-tafsirs/
-          
-          echo "Copying Tafsir Ibn Kathir (English)..."
-          cp -r quran-data/data/tafsirs/en/en-tafsir-ibn-kathir ./collected-tafsirs/
+      # مرحله ۳: فشرده‌سازی پوشه کپی شده
+      # کل پوشه tafsirs را در یک فایل زیپ به نام all-tafsirs.zip قرار می‌دهد.
+      - name: Zip the collected tafsirs directory
+        run: zip -r all-tafsirs.zip ./tafsirs
 
-      # مرحله ۴: تمام فایل‌های جمع‌آوری شده را در یک فایل zip قرار می‌دهیم
-      - name: Zip the collected tafsirs
-        run: zip -r tafsirs-archive.zip ./collected-tafsirs
-
-      # مرحله ۵: فایل zip نهایی را به عنوان آرتیفکت آپلود می‌کنیم تا قابل دانلود باشد
+      # مرحله ۴: آپلود فایل زیپ نهایی به عنوان آرتیفکت
+      # این فایل در صفحه اکشن شما برای دانلود در دسترس خواهد بود.
       - name: Upload Tafsir Archive as Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: quran-tafsirs-db
-          path: tafsirs-archive.zip
+          name: quran-tafsirs-database
+          path: all-tafsirs.zip
