@@ -1,34 +1,60 @@
-name: Build Tafsir and Corpus Databases
+name: Download Whisper Model
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # با این کار میتونی خودت دستی اجراش کنی
+    inputs:
+      model_size:
+        description: 'Model size (tiny/base/small/medium/large-v3-turbo)'
+        required: true
+        default: 'base'
+        type: choice
+        options:
+          - tiny
+          - base
+          - small
+          - medium
+          - large-v3-turbo
 
 jobs:
-  build:
+  download:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      # اجرای اسکریپت تفسیر (فایل زیپ ساخته می‌شود ولی پوش نمی‌شود)
-      - name: Run Tafsir Builder
-        run: python builder_tafsir.py
+      - name: Install dependencies
+        run: |
+          pip install huggingface_hub
 
-      # آپلود مستقیم فایل‌های زیپ در بخش Release
-      - name: Create Release and Upload Zips
-        uses: softprops/action-gh-release@v1
+      - name: Download model from Hugging Face
+        run: |
+          python -c "
+          import os
+          from huggingface_hub import snapshot_download
+          
+          model_id = f'Systran/faster-whisper-${{ github.event.inputs.model_size }}'
+          print(f'Downloading {model_id}...')
+          
+          snapshot_download(
+              repo_id=model_id,
+              local_dir=f'./model_${{ github.event.inputs.model_size }}',
+              local_dir_use_symlinks=False
+          )
+          print('Download complete!')
+          "
+
+      - name: Compress model
+        run: |
+          zip -r "faster-whisper-${{ github.event.inputs.model_size }}.zip" "./model_${{ github.event.inputs.model_size }}/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: final-db-${{ github.run_number }}
-          name: Quran Tafsir & Corpus Databases
-          files: |
-            quran_tafsir_db.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: faster-whisper-${{ github.event.inputs.model_size }}
+          path: "faster-whisper-${{ github.event.inputs.model_size }}.zip"
+          retention-days: 7
