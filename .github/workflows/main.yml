@@ -1,19 +1,7 @@
-name: Download Whisper Model
+name: Download Faster Whisper Turbo Model
 
 on:
-  workflow_dispatch:  # با این کار میتونی خودت دستی اجراش کنی
-    inputs:
-      model_size:
-        description: 'Model size (tiny/base/small/medium/large-v3-turbo)'
-        required: true
-        default: 'base'
-        type: choice
-        options:
-          - tiny
-          - base
-          - small
-          - medium
-          - large-v3-turbo
+  workflow_dispatch:  # با این کار خودت دستی اجراش می‌کنی
 
 jobs:
   download:
@@ -22,39 +10,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
+      - name: Install huggingface-hub
+        run: pip install huggingface-hub
 
-      - name: Install dependencies
-        run: |
-          pip install huggingface_hub
-
-      - name: Download model from Hugging Face
+      - name: Download faster-whisper-large-v3-turbo model
         run: |
           python -c "
-          import os
           from huggingface_hub import snapshot_download
           
-          model_id = f'Systran/faster-whisper-${{ github.event.inputs.model_size }}'
-          print(f'Downloading {model_id}...')
-          
+          # دانلود کل مدل
           snapshot_download(
-              repo_id=model_id,
-              local_dir=f'./model_${{ github.event.inputs.model_size }}',
-              local_dir_use_symlinks=False
+              repo_id='SYSTRAN/faster-whisper-large-v3-turbo',
+              local_dir='./faster-whisper-turbo-model',
+              local_dir_use_symlinks=False,
+              ignore_patterns=['*.h5', '*.ot', '*.msgpack']  # رد کردن فایل‌های اضافی
           )
-          print('Download complete!')
+          print('✅ Model downloaded successfully!')
           "
 
       - name: Compress model
         run: |
-          zip -r "faster-whisper-${{ github.event.inputs.model_size }}.zip" "./model_${{ github.event.inputs.model_size }}/"
+          # فقط فایل model.bin رو زیپ می‌کنیم (همون چیزی که واقعاً نیاز داری)
+          cd ./faster-whisper-turbo-model
+          zip -r ../faster-whisper-turbo-model.zip model.bin
+          cd ..
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: faster-whisper-${{ github.event.inputs.model_size }}
-          path: "faster-whisper-${{ github.event.inputs.model_size }}.zip"
+          name: faster-whisper-turbo-model
+          path: faster-whisper-turbo-model.zip
           retention-days: 7
